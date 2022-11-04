@@ -1,10 +1,10 @@
-import sys
-import time
+
 from constants import *
 from environment import *
 from state import State
-import numpy as np
 import random
+import matplotlib.pyplot as plt
+
 """
 solution.py
 
@@ -20,69 +20,77 @@ Last updated by njc 12/10/22
 
 class RLAgent:
 
-    #
-    # TODO: (optional) Define any constants you require here.
-    #
-
     def __init__(self, environment: Environment):
         self.environment = environment
-        #
-        # TODO: (optional) Define any class instance variables you require (e.g. Q-value tables) here.
-        #
-        self.number_of_episodes = 15000
-        self.max_steps = 100
+        self.epsilon = 0.5
+        self.states = [self.environment.get_init_state()]
+        self.q_table = {(self.environment.get_init_state(), action) : 0 for action in ROBOT_ACTIONS}
 
-        # Exploration parameters
-        self.epsilon = 1.0                 # Exploration rate
-        self.max_epsilon = 1.0             # Exploration probability at start
-        self.min_epsilon = 0.01            # Minimum exploration probability 
-        self.decay_rate = 0.005             # Exponential decay rate for exploration prob
-
-        self.state_space_size = self.number_of_states()
-        self.action_space_size = len(ROBOT_ACTIONS)
-        
-        # self.Q = np.random.rand(len(self.state_space_size), self.action_space_size)
-        # self.Q[:, :] = np.zeros(self.action_space_size) 
-        self.q_table = np.zeros((self.state_space_size, self.action_space_size))
-        self.rewards = None
+        plt.xlabel('Episode')
+        plt.ylabel('50-step moving average reward')
 
     # === Q-learning ===================================================================================================
+
 
     def q_learn_train(self):
         """
         Train this RL agent via Q-Learning.
         """
-        # https://github.com/simoninithomas/Deep_reinforcement_learning_Course/blob/master/Q%20learning/FrozenLake/Q%20Learning%20with%20FrozenLake.ipynb
-        self.rewards = {}
+        state = self.environment.get_init_state()
+        rewards = []
+        
+        reward_averages = []
 
-        for episode in range(self.number_of_episodes):
-            state = self.environment.get_init_state()
-            step = 0
-            total_rewards = 0
 
-            for step in range(self.max_steps):
-                
-                # Epsilon greedy step
-                exp_exp_tradeoff = random.uniform(0, 1)
-                if exp_exp_tradeoff > self.epsilon:
-                    action = np.argmax(self.q_table[state,:])
-                else:
-                    action = random.choice(ROBOT_ACTIONS)
-                
+        total_episode_reward = 0
+        episodes = 0
+        # while self.environment.get_total_reward() > self.environment.training_reward_tgt:
+        while episodes < 50000:
 
-                reward, next_state =  self.environment.perform_action(state, action)
-                self.q_table[state, action] = self.q_table[state, action] + self.environment.alpha * (reward + self.environment.gamma * np.max(self.q_table[next_state, :]) - self.q_table[state, action]) # Tabular QL
-                # Hvorfor får jeg denne? IndexError: only integers, slices (`:`), ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices
-                state = next_state
-                
-                if self.environment.is_solved(state): 
-                    break
+            action = self.epsilon_greedy(state)
+            
+            reward, next_state = self.environment.perform_action(state, action)
+
+            total_episode_reward += reward
+
+
+
+            if next_state not in self.states:
+                self.states.append(next_state)
+                for robot_action in ROBOT_ACTIONS:
+                    self.q_table[(next_state, robot_action)] = 0
+            
+            old_q = self.q_table[(state, action)]
+            best_next_q = 0
+            if not self.environment.is_solved(next_state):
+                best_next_q = self.q_table[(next_state, self.best_action(state))] 
+            
+            target = reward + self.environment.gamma * best_next_q
+            new_q = old_q + self.environment.alpha * (target - old_q)
+            self.q_table[(state, action)] = new_q
 
             
-        
-            # epsilon = self.min_epsilon + (self.max_epsilon - self.min_epsilon)*np.exp(-self.decay_rate*episode) 
-            self.rewards[state] = self.environment.get_total_reward()
+            if self.environment.is_solved(next_state):
+                episodes += 1
+                rewards.append(total_episode_reward)
+                if len(rewards) < 50:
+                    reward_average = sum(rewards)/ len(rewards)
+                else:
+                    reward_average = sum(rewards[-50:]) / 50
 
+                reward_averages.append(reward_average)
+                total_episode_reward = 0
+                state = self.environment.get_init_state()
+                
+            else:
+                state = next_state
+        
+        return episodes, reward_averages
+
+
+
+    
+    
 
 
     def q_learn_select_action(self, state: State):
@@ -91,21 +99,74 @@ class RLAgent:
         :param state: the current state
         :return: approximately optimal action for the given state
         """
-        #
-        # TODO: Implement code to return an approximately optimal action for the given state (based on your learned
-        #  Q-learning Q-values) here.
-        #
-        return max(self.rewards, key=self.rewards.get)
+        res = self.best_action(state)
+        print(res)
+        return self.best_action(state)
+        
     # === SARSA ========================================================================================================
 
     def sarsa_train(self):
         """
         Train this RL agent via SARSA.
         """
-        #
-        # TODO: Implement your SARSA training loop here.
-        #
-        pass
+        state = self.environment.get_init_state()
+        action = None
+
+        rewards = []
+        
+        reward_averages = []
+
+
+        total_episode_reward = 0
+        episodes = 0
+
+        # while self.environment.get_total_reward() > self.environment.training_reward_tgt:
+        while episodes < 50000:
+
+            
+            if action is None:
+                action = self.epsilon_greedy(state)
+            
+            reward, next_state = self.environment.perform_action(state, action)
+            
+            total_episode_reward += reward
+
+
+            if next_state not in self.states:
+                self.states.append(next_state)
+                for robot_action in ROBOT_ACTIONS:
+                    self.q_table[(next_state, robot_action)] = 0
+            
+            next_action = self.epsilon_greedy(next_state)
+            
+            old_q = self.q_table[(state, action)]
+            best_next_q = 0
+            if not self.environment.is_solved(next_state):
+                best_next_q = self.q_table[(next_state, next_action)]
+            
+            target = reward + self.environment.gamma * best_next_q
+            new_q = old_q + self.environment.alpha * (target - old_q)
+            self.q_table[(state, action)] = new_q
+
+            if self.environment.is_solved(next_state):
+                episodes += 1
+                rewards.append(total_episode_reward)
+                if len(rewards) < 50:
+                    reward_average = sum(rewards)/ len(rewards)
+                else:
+                    reward_average = sum(rewards[-50:]) / 50
+
+                reward_averages.append(reward_average)
+                total_episode_reward = 0
+
+                state = self.environment.get_init_state()                
+                action = None
+            else:
+                state = next_state
+                action = next_action
+
+        return episodes, reward_averages
+
 
     def sarsa_select_action(self, state: State):
         """
@@ -113,36 +174,28 @@ class RLAgent:
         :param state: the current state
         :return: approximately optimal action for the given state
         """
-        #
-        # TODO: Implement code to return an approximately optimal action for the given state (based on your learned
-        #  SARSA Q-values) here.
-        #
-        pass
-
+        res = self.best_action(state)
+        print(res)
+        return self.best_action(state)
+         
     # === Helper Methods ===============================================================================================
-    #
-    #
-    # TODO: (optional) Add any additional methods here.
-    #
-    #
 
-    
-    def number_of_states(self):
-        states = []
-        states.append(self.environment.get_init_state())
-        visited = [self.environment.get_init_state()]
-        while len(visited) > 0:
-            current_state = visited.pop()
-            for action in ROBOT_ACTIONS:
-                cost, new_state = self.environment.perform_action(current_state, action) # Denne er private så bør egt ikke bruke den.
-                if new_state not in states and new_state not in visited:
-                    visited.append(new_state)
-            if current_state not in states:
-                states.append(current_state)
-        return len(states)
+
+    def best_action(self, state: State):
+        best_q = float('-inf')
+        best_action = None
+        for action in ROBOT_ACTIONS:
+            q = self.q_table[(state, action)]
+            if q is not None and q > best_q:
+                best_q = q
+                best_action = action
+        return best_action
+
 
     def epsilon_greedy(self, state):
-        if np.random.uniform(0, 1) < 0.1: #EPSILON
-            return np.random.choice(self.action_space) #Explore (choose random number between 0 and len of action space)
+        explore_expoit_tradeoff = random.uniform(0, 1)
+        if explore_expoit_tradeoff > self.epsilon:
+            return self.best_action(state)
         else:
-            return np.argmax(self.Q[state, :])
+            return random.choice(ROBOT_ACTIONS)
+
