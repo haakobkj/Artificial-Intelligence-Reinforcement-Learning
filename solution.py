@@ -3,8 +3,6 @@ from constants import *
 from environment import *
 from state import State
 import random
-import matplotlib.pyplot as plt
-
 """
 solution.py
 
@@ -22,12 +20,9 @@ class RLAgent:
 
     def __init__(self, environment: Environment):
         self.environment = environment
-        self.epsilon = 0.5
+        self.epsilon = 0.4
         self.states = [self.environment.get_init_state()]
         self.q_table = {(self.environment.get_init_state(), action) : 0 for action in ROBOT_ACTIONS}
-
-        plt.xlabel('Episode')
-        plt.ylabel('50-step moving average reward')
 
     # === Q-learning ===================================================================================================
 
@@ -36,25 +31,15 @@ class RLAgent:
         """
         Train this RL agent via Q-Learning.
         """
-        state = self.environment.get_init_state()
-        rewards = []
         
-        reward_averages = []
-
-
-        total_episode_reward = 0
-        episodes = 0
-        # while self.environment.get_total_reward() > self.environment.training_reward_tgt:
-        while episodes < 50000:
-
+        state = self.environment.get_init_state()
+        
+        while self.environment.get_total_reward() > self.environment.training_reward_tgt:
+            
             action = self.epsilon_greedy(state)
             
             reward, next_state = self.environment.perform_action(state, action)
-
-            total_episode_reward += reward
-
-
-
+            
             if next_state not in self.states:
                 self.states.append(next_state)
                 for robot_action in ROBOT_ACTIONS:
@@ -69,28 +54,10 @@ class RLAgent:
             new_q = old_q + self.environment.alpha * (target - old_q)
             self.q_table[(state, action)] = new_q
 
-            
             if self.environment.is_solved(next_state):
-                episodes += 1
-                rewards.append(total_episode_reward)
-                if len(rewards) < 50:
-                    reward_average = sum(rewards)/ len(rewards)
-                else:
-                    reward_average = sum(rewards[-50:]) / 50
-
-                reward_averages.append(reward_average)
-                total_episode_reward = 0
                 state = self.environment.get_init_state()
-                
             else:
                 state = next_state
-        
-        return episodes, reward_averages
-
-
-
-    
-    
 
 
     def q_learn_select_action(self, state: State):
@@ -99,9 +66,8 @@ class RLAgent:
         :param state: the current state
         :return: approximately optimal action for the given state
         """
-        res = self.best_action(state)
-        print(res)
         return self.best_action(state)
+        
         
     # === SARSA ========================================================================================================
 
@@ -112,26 +78,13 @@ class RLAgent:
         state = self.environment.get_init_state()
         action = None
 
-        rewards = []
-        
-        reward_averages = []
-
-
-        total_episode_reward = 0
-        episodes = 0
-
-        # while self.environment.get_total_reward() > self.environment.training_reward_tgt:
-        while episodes < 50000:
-
+        while self.environment.get_total_reward() > self.environment.training_reward_tgt:
             
             if action is None:
                 action = self.epsilon_greedy(state)
             
             reward, next_state = self.environment.perform_action(state, action)
             
-            total_episode_reward += reward
-
-
             if next_state not in self.states:
                 self.states.append(next_state)
                 for robot_action in ROBOT_ACTIONS:
@@ -149,23 +102,11 @@ class RLAgent:
             self.q_table[(state, action)] = new_q
 
             if self.environment.is_solved(next_state):
-                episodes += 1
-                rewards.append(total_episode_reward)
-                if len(rewards) < 50:
-                    reward_average = sum(rewards)/ len(rewards)
-                else:
-                    reward_average = sum(rewards[-50:]) / 50
-
-                reward_averages.append(reward_average)
-                total_episode_reward = 0
-
-                state = self.environment.get_init_state()                
+                state = self.environment.get_init_state()
                 action = None
             else:
                 state = next_state
                 action = next_action
-
-        return episodes, reward_averages
 
 
     def sarsa_select_action(self, state: State):
@@ -174,8 +115,6 @@ class RLAgent:
         :param state: the current state
         :return: approximately optimal action for the given state
         """
-        res = self.best_action(state)
-        print(res)
         return self.best_action(state)
          
     # === Helper Methods ===============================================================================================
@@ -198,4 +137,4 @@ class RLAgent:
             return self.best_action(state)
         else:
             return random.choice(ROBOT_ACTIONS)
-
+        
